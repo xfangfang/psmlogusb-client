@@ -10,6 +10,7 @@ add_executable(${PROJECT_NAME}
   src/main.c
 )
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIBUSB_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME} ${LIBUSB_LIBRARIES})
 
 install(TARGETS ${PROJECT_NAME}

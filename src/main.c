@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <errno.h>
 
-#include <libusb-1.0/libusb.h>
+#include <libusb.h>
 
 #define VENDOR_ID      0x054c   // Sony Corp.
 #define PRODUCT_ID     0x069b   // PS Vita
@@ -19,30 +19,21 @@ int read_log(unsigned char* data, int size)
 {
     int actual_length;
     int rc = libusb_bulk_transfer(devh, ep_in_addr, data, size, &actual_length, 1000);
-    if (rc == LIBUSB_ERROR_TIMEOUT) {
-        return -1;
-    } else if (rc < 0) {
-        return -1;
-    }
+    if (rc < 0)
+        return rc;
 
     return actual_length;
 }
 
-int main(int argc, char **argv)
+void usb_event()
 {
     int rc;
-
-    rc = libusb_init(NULL);
-    if (rc < 0) {
-        fprintf(stderr, "Error initializing libusb: %s\n", libusb_error_name(rc));
-        exit(1);
-    }
-
     devh = libusb_open_device_with_vid_pid(NULL, VENDOR_ID, PRODUCT_ID);
     if (!devh) {
-        fprintf(stderr, "Error finding USB device\n");
+        fprintf(stderr, "Error finding USB device (Press Ctrl-C to stop)\n");
         goto out;
     }
+    fprintf(stdout, "PSMLOGUSB Started (Press Ctrl-C to stop)\n");
 
     // detach kernel driver, if attached
     for (int if_num = 0; if_num < 2; if_num++) {
@@ -77,6 +68,9 @@ int main(int argc, char **argv)
         {
             buf[len] = 0;
             fprintf(stdout, "%s",buf);
+        } else if (len != LIBUSB_ERROR_TIMEOUT) {
+            // usb error
+            break;
         }
     }
 
@@ -84,7 +78,35 @@ int main(int argc, char **argv)
 
 out:
     if (devh)
-            libusb_close(devh);
+        libusb_close(devh);
+}
+
+static void signal_handler(int sig_num) {
+    signal(sig_num, signal_handler);
+    fprintf(stdout, "\nByeBye.\n");
+    libusb_exit(NULL);
+    exit(sig_num);
+}
+
+int main(int argc, char **argv)
+{
+    int rc;
+
+    rc = libusb_init(NULL);
+    if (rc < 0) {
+        fprintf(stderr, "Error initializing libusb: %s\n", libusb_error_name(rc));
+        exit(1);
+    }
+
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+
+    while(1) {
+        usb_event();
+        sleep(5);
+    }
+
     libusb_exit(NULL);
     return rc;
 }
